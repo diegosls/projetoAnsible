@@ -1,0 +1,142 @@
+---
+- name: Provisionar e configurar a VM
+  hosts: all
+  become: true  # Permite executar tarefas como root
+  tasks:
+    # 2.2.1 Atualização do Sistema Operacional
+    - name: Atualizar todos os pacotes do sistema
+      apt:
+        update_cache: yes
+        upgrade: yes
+        autoclean: yes
+        autoremove: yes
+
+    # 2.2.2 Configuração do Hostname
+    - name: Alterar o hostname
+      hostname:
+        name: "p01-diego-igor"
+
+    # 2.2.3 Criando usuários
+    - name: Criar os usuários
+      user:
+        name: "{{ item }}"
+        state: present
+        shell: /bin/bash
+      with_items:
+        - diego
+        - igor
+
+    # 2.2.4 Mensagem de saudação
+    - name: Definir a mensagem de saudação no SSH
+      lineinfile:
+        path: /etc/motd
+        line: |
+          Acesso restrito apenas à pessoas com autorização expressa
+          Seu acesso está sendo monitorado !!!
+
+    # 2.2.5 Configuração de SUDO
+    - name: Adicionar grupo ifpb
+      group:
+        name: ifpb
+        state: present
+
+    - name: Conceder acesso sudo ao grupo ifpb
+      lineinfile:
+        path: /etc/sudoers
+        line: "%ifpb ALL=(ALL) NOPASSWD:ALL"
+        validate: visudo -cf %s
+
+    # 2.2.6 Configuração de SSH
+    - name: Configurar SSH para autenticação por chaves públicas
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+
+    - name: Bloquear acesso root via SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: 'PermitRootLogin no'
+
+    - name: Permitir apenas usuários do grupo acesso_ssh
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'AllowGroups acesso_ssh'
+
+    - name: Criar grupo acesso_ssh
+      group:
+        name: acesso_ssh
+
+    - name: Gerar chave SSH para usuários
+      authorized_key:
+        user: "{{ item }}"
+        key: "{{ lookup('file', '/home/{{ item }}/.ssh/id_rsa.pub') }}"
+      with_items:
+        - diego
+        - igor
+
+    # 2.2.7 Configuração de LVM
+    - name: Instalar pacotes LVM
+      apt:
+        name: lvm2
+        state: present
+
+    - name: Criar Volume Group "dados"
+      command: vgcreate dados /dev/sd[b-d]
+
+    - name: Criar Logical Volume "sistema"
+      command: lvcreate -L 15G -n sistema dados
+
+    - name: Formatar o Logical Volume em ext4
+      filesystem:
+        fstype: ext4
+        dev: /dev/dados/sistema
+
+    - name: Montar o Logical Volume em /dados
+      mount:
+        path: /dados
+        src: /dev/dados/sistema
+        fstype: ext4
+        state: mounted
+
+    - name: Configurar montagem automática no /etc/fstab
+      lineinfile:
+        path: /etc/fstab
+        line: '/dev/dados/sistema /dados ext4 defaults 0 2'
+
+    # 2.2.8 Configuração de NFS
+    - name: Instalar pacotes NFS
+      apt:
+        name: nfs-kernel-server
+        state: present
+
+    - name: Configurar exportação NFS
+      lineinfile:
+        path: /etc/exports
+        line: '/dados/nfs 192.168.57.0/24(rw,sync,no_root_squash,all_squash,anonuid=1001,anongid=1001)'
+
+    - name: Criar usuário nfs-ifpb
+      user:
+        name: nfs-ifpb
+        state: present
+        shell: /usr/sbin/nologin
+
+    - name: Reiniciar o serviço NFS
+      service:
+        name: nfs-kernel-server
+        state: restarted
+
+    # 2.2.9 Monitoramento de acesso
+    - name: Criar script para monitoramento de acesso
+      copy:
+        dest: /usr/local/bin/monitor_acesso.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          echo "$(date '+%Y-%m-%d %H:%M'); $PAM_USER; $PAM_TTY; $PAM_RHOST" >> /dados/nfs/acessos
+
+    - name: Configurar PAM para executar o script
+      lineinfile:
+        path: /etc/pam.d/sshd
+        line: 'session optional pam_exec.so seteuid /usr/local/bin/monitor_acesso.sh'
