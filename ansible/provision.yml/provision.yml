@@ -140,3 +140,58 @@
       lineinfile:
         path: /etc/pam.d/sshd
         line: 'session optional pam_exec.so seteuid /usr/local/bin/monitor_acesso.sh'
+        # 2.2.10 Configuração de Firewall
+    - name: Instalar pacotes de firewall
+      apt:
+        name: ufw
+        state: present
+
+    - name: Permitir tráfego SSH no firewall
+      ufw:
+        rule: allow
+        name: OpenSSH
+
+    - name: Ativar o firewall
+      ufw:
+        state: enabled
+
+    - name: Configurar o firewall para permitir NFS
+      ufw:
+        rule: allow
+        port: '2049'
+
+    # 2.2.11 Configuração de Logs
+    - name: Configurar logs de acesso SSH
+      lineinfile:
+        path: /etc/rsyslog.d/50-default.conf
+        line: 'auth,authpriv.*   /var/log/auth.log'
+
+    - name: Reiniciar o serviço rsyslog
+      service:
+        name: rsyslog
+        state: restarted
+
+    # 2.2.12 Verificação Final
+    - name: Verificar se o LVM foi montado corretamente
+      command: df -h /dados
+      register: lvm_mount_check
+      failed_when: lvm_mount_check.stdout.find("/dados") == -1
+
+    - name: Verificar se o NFS está exportando corretamente
+      command: showmount -e localhost
+      register: nfs_export_check
+      failed_when: nfs_export_check.stdout.find("/dados/nfs") == -1
+
+    - name: Verificar se a configuração do SSH foi aplicada
+      command: ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -o 'UserKnownHostsFile=/dev/null' {{ item }}@localhost exit
+      with_items:
+        - diego
+        - igor
+      register: ssh_check
+      failed_when: ssh_check.results[0].rc != 0 or ssh_check.results[1].rc != 0
+
+    # Finalização
+    - name: Exibir mensagem de sucesso
+      debug:
+        msg: "A configuração foi concluída com sucesso!"
+
