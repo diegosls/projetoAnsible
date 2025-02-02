@@ -1,6 +1,6 @@
 Vagrant.configure("2") do |config|
   # Define a box genérica Debian 12
-  config.vm.box = "generic/debian12"
+  config.vm.box = "debian/bookworm64"
 
   # Configurações do provedor VirtualBox
   config.vm.provider "virtualbox" do |vb|
