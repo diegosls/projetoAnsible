@@ -1,6 +1,6 @@
 Vagrant.configure("2") do |config|
   # Define a box genérica Debian 12
-  config.vm.box = "debian/bookworm64"
+  config.vm.box = "reboxes/ubuntu2204"
 
   # Configurações do provedor VirtualBox
   config.vm.provider "virtualbox" do |vb|
@@ -22,7 +22,8 @@ Vagrant.configure("2") do |config|
 
     # Caminho absoluto para o playbook
     aluno.vm.provision "ansible" do |ansible|
-      ansible.playbook = File.expand_path("ansible/provision.yml")
+      ansible.playbook = "/home/ifpb/projetoAnsible/ansible/provision.yml"
+      ansible.compatibility_mode = "1.8"       
     end
   end
 end
