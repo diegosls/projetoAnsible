@@ -4,12 +4,12 @@
   become: true  # Permite executar tarefas como root
   tasks:
     # 2.2.1 Atualização do Sistema Operacional
-    - name: Atualizar todos os pacotes do sistema
-      apt:
-        update_cache: yes
-        upgrade: yes
-        autoclean: yes
-        autoremove: yes
+    #- ame: Atualizar todos os pacotes do sistema
+      #apt:
+        #update_cache: yes
+        #upgrade: yes
+        #autoclean: yes
+        #autoremove: yes 
 
     # 2.2.2 Configuração do Hostname
     - name: Alterar o hostname
